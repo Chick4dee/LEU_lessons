@@ -411,7 +411,7 @@
                         <button onclick="checkInput('p2-q4')" class="touch-btn px-5 py-2.5 bg-vampire-teal text-vampire-900 font-bold rounded-xl hover:bg-teal-300">Check</button>
                         <span id="p2-q4-msg" class="fb font-bold"></span>
                     </div>
-                    <p class="answer-key text-xs text-amber-300 mt-2">Key: 1 B · 2 B · 3 B · 4 is used to living</p>
+                    <p class="answer-key text-xs text-amber-300 mt-2">Key: is used to living</p>
                 </div>
             </div>
         </section>
@@ -1031,7 +1031,8 @@
             wrap.className = 'bg-vampire-800/80 p-5 rounded-2xl border border-slate-700';
             wrap.innerHTML = `<p class="text-slate-200 font-semibold mb-3">${item.q}</p>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
-                <p class="mcq-why text-sm font-bold mt-3 h-5"></p>`;
+                <p class="mcq-why text-sm font-bold mt-3 h-5"></p>
+                <p class="answer-key text-xs text-amber-300 mt-1">Key: ${item.o[item.c]} — ${item.why}</p>`;
             const grid = wrap.querySelector('div');
             item.o.forEach((txt, oi) => {
                 const b = document.createElement('button');
