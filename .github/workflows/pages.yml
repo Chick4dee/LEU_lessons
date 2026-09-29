@@ -1,0 +1,42 @@
+name: Publish site
+
+# Runs every time something is uploaded to the repository.
+# It rebuilds the lesson list (lessons.json) and publishes the site.
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Get the files
+        uses: actions/checkout@v4
+
+      - name: Build the lesson list
+        run: python3 scripts/build_menu.py
+
+      - name: Prepare Pages
+        uses: actions/configure-pages@v5
+
+      - name: Pack the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Publish
+        id: deployment
+        uses: actions/deploy-pages@v4
