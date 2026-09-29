@@ -66,6 +66,10 @@ def read_lesson(path):
         "icon": m.get("icon") or "fa-book",
         "color": m.get("color") or "gold",
         "order": to_int(m.get("order"), 1000),
+        "theme": m.get("theme", ""),
+        "bg": m.get("bg", ""),
+        "accent": m.get("accent", ""),
+        "text": m.get("text", ""),
         "href": "lessons/" + path.name,
     }
 
