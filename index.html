@@ -6,7 +6,7 @@
     <title>English Lessons</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Cinzel:wght@500;700;900&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             darkMode: 'media',
@@ -15,7 +15,7 @@
     </script>
     <style>
         .lesson-card { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
-        a.lesson-card:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(15, 23, 42, .12); }
+        a.lesson-card:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(15, 23, 42, .25); }
         a.lesson-card:active { transform: scale(.98); }
         .tag-filter.active { background: #1e293b; color: #fff; border-color: #1e293b; }
         @media (prefers-color-scheme: dark) {
@@ -45,8 +45,24 @@
     <script>
     /* The list of lessons is NOT edited here.
        It is built automatically from the files in the "lessons" folder
-       (see scripts/build_menu.py) and saved in lessons.json. */
+       (see scripts/build_menu.py) and saved in lessons.json.
 
+       Each lesson picks the look of its card with <meta name="lesson:theme">:
+       twilight, ocean, forest, sunset, paper  (no theme = neutral card).
+       Own colours (optional): lesson:bg, lesson:accent, lesson:text, e.g. #0f172a */
+
+    /* Ready-made card themes */
+    const THEMES = {
+        twilight: { bg: 'linear-gradient(135deg,#111420 0%,#1b2033 60%,#2b1424 100%)', text: '#f1f5f9', accent: '#d4af37', border: 'rgba(212,175,55,.45)', font: "'Cinzel', serif" },
+        ocean:    { bg: 'linear-gradient(135deg,#0c4a6e 0%,#075985 55%,#0e7490 100%)', text: '#f0f9ff', accent: '#7dd3fc', border: 'rgba(125,211,252,.4)', font: 'inherit' },
+        forest:   { bg: 'linear-gradient(135deg,#14532d 0%,#166534 55%,#3f6212 100%)', text: '#f0fdf4', accent: '#bef264', border: 'rgba(190,242,100,.4)', font: 'inherit' },
+        sunset:   { bg: 'linear-gradient(135deg,#7c2d12 0%,#be123c 65%,#9d174d 100%)', text: '#fff7ed', accent: '#fdba74', border: 'rgba(253,186,116,.4)', font: 'inherit' },
+        paper:    { bg: '#fffbeb', text: '#422006', accent: '#b45309', border: '#fde68a', font: 'inherit' },
+        custom:   { bg: '#1e293b', text: '#f8fafc', accent: '#38bdf8', border: null, font: 'inherit' }
+    };
+    const HEX = /^#[0-9a-fA-F]{3,8}$/;
+
+    /* Colours for neutral (theme-less) cards */
     const PALETTE = {
         blue:   { icon: 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300',       accent: 'text-blue-600 dark:text-blue-300' },
         green:  { icon: 'bg-green-100 text-green-600 dark:bg-green-500/20 dark:text-green-300',    accent: 'text-green-600 dark:text-green-300' },
@@ -57,7 +73,7 @@
         violet: { icon: 'bg-violet-100 text-violet-600 dark:bg-violet-500/20 dark:text-violet-300', accent: 'text-violet-600 dark:text-violet-300' },
         slate:  { icon: 'bg-slate-200 text-slate-600 dark:bg-slate-600/40 dark:text-slate-300',    accent: 'text-slate-600 dark:text-slate-300' }
     };
-    PALETTE.gold = PALETTE.amber;   // older lessons use "gold"
+    PALETTE.gold = PALETTE.amber;
     PALETTE.rose = PALETTE.red;
 
     let LESSONS = [];
@@ -65,6 +81,36 @@
 
     function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    /* Returns the resolved theme object, or null for a neutral card */
+    function resolveTheme(l) {
+        const preset = THEMES[String(l.theme || '').toLowerCase()];
+        const hasCustom = HEX.test(l.bg || '') || HEX.test(l.accent || '') || HEX.test(l.text || '');
+        if (!preset && !hasCustom) return null;
+        const t = Object.assign({}, preset || THEMES.custom);
+        if (HEX.test(l.bg || '')) t.bg = l.bg;
+        if (HEX.test(l.accent || '')) t.accent = l.accent;
+        if (HEX.test(l.text || '')) t.text = l.text;
+        if (!t.border || (preset && (HEX.test(l.accent || '')))) t.border = 'color-mix(in srgb, ' + t.accent + ' 45%, transparent)';
+        return t;
+    }
+
+    /* Level and time chips (shown on every card) */
+    function chipsHtml(l, t) {
+        const chips = [];
+        if (l.level) chips.push(['fa-signal', l.level]);
+        if (l.minutes) chips.push(['fa-clock', l.minutes + ' min']);
+        if (!chips.length) return '';
+        return '<div class="flex flex-wrap gap-2 mb-3">' + chips.map(([ic, txt]) => {
+            if (t) {
+                return `<span class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full"
+                    style="color:${t.accent};border:1px solid color-mix(in srgb, ${t.accent} 50%, transparent);background:color-mix(in srgb, ${t.accent} 14%, transparent)">
+                    <i class="fa-solid ${ic}"></i>${esc(txt)}</span>`;
+            }
+            return `<span class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                <i class="fa-solid ${ic}"></i>${esc(txt)}</span>`;
+        }).join('') + '</div>';
     }
 
     function renderFilters() {
@@ -85,25 +131,46 @@
         const grid = document.getElementById('lessonGrid');
         grid.innerHTML = '';
         LESSONS.filter(l => activeLevel === 'All' || l.level === activeLevel).forEach(l => {
-            const c = PALETTE[l.color] || PALETTE.blue;
             const icon = /^fa-[a-z0-9-]+$/.test(l.icon || '') ? l.icon : 'fa-book';
+            const t = resolveTheme(l);
             const el = document.createElement('a');
             el.href = l.href;
-            el.className = 'lesson-card flex flex-col p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm';
-            el.innerHTML = `
-                <div class="flex items-center justify-between mb-4">
-                    <div class="w-12 h-12 rounded-xl ${c.icon} flex items-center justify-center">
+
+            if (t) {
+                /* Themed card */
+                el.className = 'lesson-card relative overflow-hidden flex flex-col p-6 rounded-2xl shadow-md';
+                el.setAttribute('style', `background:${t.bg};color:${t.text};border:1px solid ${t.border}`);
+                el.innerHTML = `
+                    <div style="position:absolute;right:-10px;bottom:-22px;font-size:9rem;line-height:1;color:${t.accent};opacity:.09;pointer-events:none"><i class="fa-solid ${icon}"></i></div>
+                    <div class="relative flex flex-col flex-1">
+                        <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                             style="color:${t.accent};background:color-mix(in srgb, ${t.accent} 18%, transparent);border:1px solid color-mix(in srgb, ${t.accent} 35%, transparent)">
+                            <i class="fa-solid ${icon} text-xl"></i>
+                        </div>
+                        <h2 class="text-xl font-bold mb-1" style="font-family:${t.font}">${esc(l.title)}</h2>
+                        ${l.grammar ? `<p class="text-xs font-semibold uppercase tracking-wide mb-3" style="color:${t.accent}">${esc(l.grammar)}</p>` : '<div class="mb-2"></div>'}
+                        ${chipsHtml(l, t)}
+                        <p class="text-sm flex-1" style="opacity:.8">${esc(l.desc)}</p>
+                        <div class="flex items-center justify-end mt-5 pt-4 text-sm" style="border-top:1px solid color-mix(in srgb, ${t.accent} 25%, transparent)">
+                            <span class="font-bold" style="color:${t.accent}">Start <i class="fa-solid fa-arrow-right ml-1"></i></span>
+                        </div>
+                    </div>`;
+            } else {
+                /* Neutral card */
+                const c = PALETTE[l.color] || PALETTE.blue;
+                el.className = 'lesson-card flex flex-col p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm';
+                el.innerHTML = `
+                    <div class="w-12 h-12 rounded-xl ${c.icon} flex items-center justify-center mb-4">
                         <i class="fa-solid ${icon} text-xl"></i>
                     </div>
-                    ${l.level ? `<span class="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">${esc(l.level)}</span>` : ''}
-                </div>
-                <h2 class="text-lg font-bold mb-1">${esc(l.title)}</h2>
-                ${l.grammar ? `<p class="text-xs font-semibold uppercase tracking-wide ${c.accent} mb-3">${esc(l.grammar)}</p>` : ''}
-                <p class="text-sm text-slate-600 dark:text-slate-300 flex-1">${esc(l.desc)}</p>
-                <div class="flex items-center justify-between mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 text-sm">
-                    <span class="text-slate-500 dark:text-slate-400">${l.minutes ? `<i class="fa-regular fa-clock mr-1"></i>${esc(l.minutes)} min` : ''}</span>
-                    <span class="font-bold ${c.accent}">Start <i class="fa-solid fa-arrow-right ml-1"></i></span>
-                </div>`;
+                    <h2 class="text-xl font-bold mb-1">${esc(l.title)}</h2>
+                    ${l.grammar ? `<p class="text-xs font-semibold uppercase tracking-wide ${c.accent} mb-3">${esc(l.grammar)}</p>` : '<div class="mb-2"></div>'}
+                    ${chipsHtml(l, null)}
+                    <p class="text-sm text-slate-600 dark:text-slate-300 flex-1">${esc(l.desc)}</p>
+                    <div class="flex items-center justify-end mt-5 pt-4 border-t border-slate-100 dark:border-slate-700 text-sm">
+                        <span class="font-bold ${c.accent}">Start <i class="fa-solid fa-arrow-right ml-1"></i></span>
+                    </div>`;
+            }
             grid.appendChild(el);
         });
     }
