@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Twilight Grammar - Interactive Whiteboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        vampire: {
+                            900: '#090a0f', 800: '#111420', 700: '#1b2033',
+                            crimson: '#880808', blood: '#a80c0c', mist: '#1e293b',
+                            gold: '#d4af37', goldGlow: '#f5d061', teal: '#14b8a6'
+                        }
+                    },
+                    fontFamily: { cinzel: ['Cinzel', 'serif'], sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    <style>
+        html { font-size: 16px; }
+        body {
+            user-select: none; -webkit-user-select: none;
+            touch-action: manipulation; overflow: hidden;
+            background-color: #090a0f; color: #f1f5f9;
+        }
+        /* Safari fix: text fields must stay selectable/editable */
+        input, textarea { user-select: text; -webkit-user-select: text; }
+
+        .font-cinzel { font-family: 'Cinzel', serif; }
+
+        .glass-panel {
+            background: rgba(17, 20, 32, 0.78);
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(212, 175, 55, 0.25);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+        }
+        .glow-text-gold { text-shadow: 0 0 10px rgba(212,175,55,.6), 0 0 20px rgba(212,175,55,.3); }
+
+        /* Layers: fog 1 < slides 20 < drawing 25 < header/footer 30 < notes 40 < toolbar 50 < laser 100 */
+        #fogCanvas { position: fixed; top: 0; left: 0; z-index: 1; pointer-events: none; opacity: .35; }
+        #drawingCanvas { position: fixed; top: 0; left: 0; z-index: 25; touch-action: none; pointer-events: none; }
+
+        .touch-btn { transition: all .15s ease-out; }
+        .touch-btn:active { transform: scale(.95); }
+        button:disabled { opacity: .35; cursor: not-allowed; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: rgba(9,10,15,.8); }
+        ::-webkit-scrollbar-thumb { background: rgba(212,175,55,.4); border-radius: 4px; }
+
+        .sticky-note { box-shadow: 5px 5px 15px rgba(0,0,0,.5); transform: rotate(-1deg); position: fixed; z-index: 40; touch-action: none; cursor: grab; }
+
+        .laser-pointer {
+            pointer-events: none; position: fixed; width: 20px; height: 20px; border-radius: 50%;
+            background: rgba(255,0,55,.9); box-shadow: 0 0 15px #ff0037, 0 0 30px #ff0037;
+            transform: translate(-50%,-50%); z-index: 100; display: none; left: -50px; top: -50px;
+        }
+
+        /* Toolbar */
+        .tool-btn.active { background: rgba(212,175,55,.3) !important; color: #d4af37 !important; }
+        .color-btn { width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); transition: transform .15s; }
+        .color-btn:hover { transform: scale(1.1); }
+        .color-btn.active { border-color: #fff; box-shadow: 0 0 0 2px #d4af37; }
+
+        /* Exercise states */
+        input.ok  { border-color: #10b981 !important; }
+        input.bad { border-color: #ef4444 !important; }
+        .match-item.sel, .target-item.sel { border-color: #d4af37 !important; background: rgba(212,175,55,.2) !important; }
+        .match-item.done, .target-item.done { border-color: #10b981 !important; background: rgba(6,78,59,.5) !important; }
+        .mcq-opt.right { background: #064e3b; border-color: #10b981; }
+        .mcq-opt.wrong { background: #7f1d1d; border-color: #ef4444; }
+
+        /* Teacher answer key */
+        .answer-key { display: none; }
+        body.show-answers .answer-key { display: block; }
+
+        @keyframes flash { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+        .timer-flash { animation: flash .6s ease-in-out 6; color: #ef4444 !important; }
+    </style>
+</head>
+<body class="w-screen h-screen flex flex-col font-sans relative overflow-hidden bg-vampire-900">
+
+    <canvas id="fogCanvas"></canvas>
+    <canvas id="drawingCanvas"></canvas>
+    <div id="laserPointer" class="laser-pointer"></div>
+
+    <!-- HEADER -->
+    <header class="relative z-30 flex items-center justify-between px-4 md:px-6 py-3 glass-panel border-b border-vampire-gold/30">
+        <div class="flex items-center space-x-3">
+            <a href="../index.html" title="Back to lesson menu" class="touch-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-vampire-gold border border-vampire-gold/40 rounded-xl flex items-center space-x-2 text-sm font-bold">
+                <i class="fa-solid fa-house"></i><span class="hidden md:inline">Menu</span>
+            </a>
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-moon text-vampire-gold text-2xl animate-pulse"></i>
+                <h1 class="font-cinzel text-lg md:text-2xl font-bold tracking-wider text-vampire-gold glow-text-gold">
+                    TWILIGHT <span class="hidden md:inline text-xs text-slate-400 font-sans tracking-normal font-normal">| Grammar Board</span>
+                </h1>
+            </div>
+            <span class="hidden sm:inline bg-vampire-crimson/40 text-red-200 border border-red-500/30 text-xs px-3 py-1 rounded-full font-bold">B1+ / B2</span>
+        </div>
+
+        <div class="hidden lg:flex items-center space-x-2 bg-vampire-800/80 px-4 py-1.5 rounded-full border border-vampire-gold/20">
+            <span class="text-xs text-vampire-gold uppercase font-bold tracking-widest">Topic:</span>
+            <span id="currentTopicLabel" class="text-sm font-semibold text-slate-200">Title</span>
+        </div>
+
+        <div class="flex items-center space-x-2">
+            <button onclick="toggleAnswers()" id="answersBtn" title="Teacher: show / hide answer keys" class="touch-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/40 rounded-xl flex items-center space-x-2 text-sm font-bold">
+                <i class="fa-solid fa-eye-slash"></i><span class="hidden md:inline">Answers</span>
+            </button>
+            <button onclick="changeFont(-2)" title="Smaller text" class="touch-btn px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 text-xs font-bold">A−</button>
+            <button onclick="changeFont(2)" title="Bigger text" class="touch-btn px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700 text-sm font-bold">A+</button>
+            <button onclick="toggleTimerWidget()" class="touch-btn px-3 py-2 bg-slate-800 hover:bg-slate-700 text-vampire-gold border border-vampire-gold/40 rounded-xl flex items-center space-x-2 text-sm font-bold">
+                <i class="fa-solid fa-stopwatch"></i><span id="timerDisplay">05:00</span>
+            </button>
+            <button id="soundToggleBtn" onclick="toggleSound()" class="touch-btn p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700">
+                <i class="fa-solid fa-volume-high"></i>
+            </button>
+            <button onclick="toggleFullscreen()" class="touch-btn p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl border border-slate-700">
+                <i class="fa-solid fa-expand"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- TOOLBAR -->
+    <aside class="fixed left-3 top-1/2 -translate-y-1/2 z-50 flex flex-col space-y-1.5 glass-panel p-2 rounded-2xl border border-vampire-gold/30 shadow-2xl max-h-[78vh] overflow-y-auto">
+        <button id="tool-select" onclick="setTool('select')" class="tool-btn active touch-btn p-2.5 rounded-xl hover:bg-vampire-gold/20 text-slate-300 flex flex-col items-center" title="Interact (no drawing)">
+            <i class="fa-solid fa-hand-pointer text-lg"></i><span class="text-[9px] mt-1 font-bold">Touch</span>
+        </button>
+        <button id="tool-pen" onclick="setTool('pen')" class="tool-btn touch-btn p-2.5 rounded-xl hover:bg-vampire-gold/20 text-slate-300 flex flex-col items-center" title="Pen">
+            <i class="fa-solid fa-pen-nib text-lg"></i><span class="text-[9px] mt-1 font-bold">Pen</span>
+        </button>
+        <button id="tool-highlighter" onclick="setTool('highlighter')" class="tool-btn touch-btn p-2.5 rounded-xl hover:bg-vampire-gold/20 text-slate-300 flex flex-col items-center" title="Highlighter">
+            <i class="fa-solid fa-highlighter text-lg"></i><span class="text-[9px] mt-1 font-bold">Marker</span>
+        </button>
+        <button id="tool-laser" onclick="setTool('laser')" class="tool-btn touch-btn p-2.5 rounded-xl hover:bg-vampire-gold/20 text-slate-300 flex flex-col items-center" title="Laser pointer">
+            <i class="fa-solid fa-wand-magic-sparkles text-lg"></i><span class="text-[9px] mt-1 font-bold">Laser</span>
+        </button>
+        <button id="tool-eraser" onclick="setTool('eraser')" class="tool-btn touch-btn p-2.5 rounded-xl hover:bg-vampire-gold/20 text-slate-300 flex flex-col items-center" title="Eraser">
+            <i class="fa-solid fa-eraser text-lg"></i><span class="text-[9px] mt-1 font-bold">Eraser</span>
+        </button>
+
+        <div class="py-2 border-t border-b border-slate-700/60 flex flex-col items-center space-y-2">
+            <button class="color-btn active" data-color="#f5d061" style="background:#f5d061" onclick="setPenColor('#f5d061')"></button>
+            <button class="color-btn" data-color="#ef4444" style="background:#ef4444" onclick="setPenColor('#ef4444')"></button>
+            <button class="color-btn" data-color="#14b8a6" style="background:#14b8a6" onclick="setPenColor('#14b8a6')"></button>
+            <button class="color-btn" data-color="#ffffff" style="background:#ffffff" onclick="setPenColor('#ffffff')"></button>
+            <button onclick="cycleSize()" class="text-[10px] font-bold text-slate-300 bg-slate-800 rounded-lg px-2 py-1 border border-slate-600" title="Line thickness">
+                Size: <span id="sizeLabel">M</span>
+            </button>
+        </div>
+
+        <button onclick="undoDraw()" class="touch-btn p-2.5 rounded-xl hover:bg-slate-500/20 text-slate-200 flex flex-col items-center" title="Undo last stroke">
+            <i class="fa-solid fa-rotate-left text-lg"></i><span class="text-[9px] mt-1 font-bold">Undo</span>
+        </button>
+        <button onclick="createStickyNote()" class="touch-btn p-2.5 rounded-xl hover:bg-amber-500/20 text-amber-400 flex flex-col items-center" title="Add sticky note">
+            <i class="fa-solid fa-note-sticky text-lg"></i><span class="text-[9px] mt-1 font-bold">+ Note</span>
+        </button>
+        <button onclick="clearCanvasOverlay()" class="touch-btn p-2.5 rounded-xl hover:bg-red-500/20 text-red-400 flex flex-col items-center" title="Clear drawing on this slide">
+            <i class="fa-solid fa-trash-can text-lg"></i><span class="text-[9px] mt-1 font-bold">Clear</span>
+        </button>
+    </aside>
+
+    <!-- TIMER -->
+    <div id="timerWidget" class="hidden fixed top-20 right-6 z-50 glass-panel p-4 rounded-2xl w-64 border border-vampire-gold/40 shadow-2xl">
+        <div class="flex justify-between items-center mb-2 border-b border-slate-700 pb-2">
+            <h3 class="font-cinzel text-sm font-bold text-vampire-gold"><i class="fa-solid fa-clock mr-2"></i>Classroom Timer</h3>
+            <button onclick="toggleTimerWidget()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="bigTimerDisplay" class="text-4xl font-bold font-mono text-center my-3 text-vampire-goldGlow glow-text-gold">05:00</div>
+        <div class="grid grid-cols-3 gap-2 mb-3">
+            <button onclick="addTimer(60)" class="bg-slate-800 text-xs py-1.5 rounded hover:bg-slate-700 font-semibold">+1 Min</button>
+            <button onclick="addTimer(180)" class="bg-slate-800 text-xs py-1.5 rounded hover:bg-slate-700 font-semibold">+3 Min</button>
+            <button onclick="addTimer(300)" class="bg-slate-800 text-xs py-1.5 rounded hover:bg-slate-700 font-semibold">+5 Min</button>
+        </div>
+        <div class="flex space-x-2">
+            <button id="startTimerBtn" onclick="toggleTimerRun()" class="flex-1 bg-vampire-crimson hover:bg-red-700 text-white font-bold py-2 rounded-xl text-sm transition">Start</button>
+            <button onclick="resetTimer()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold px-3 py-2 rounded-xl text-sm">Reset</button>
+        </div>
+    </div>
+
+    <!-- SLIDES -->
+    <main class="relative z-20 flex-1 w-full max-w-7xl mx-auto py-4 pl-24 pr-4 md:pr-6 flex flex-col overflow-y-auto">
+
+        <!-- 1: Title -->
+        <section id="slide-1" class="slide-content my-auto w-full text-center flex justify-center">
+            <div class="glass-panel p-8 md:p-12 rounded-3xl max-w-4xl border-2 border-vampire-gold/40 shadow-2xl relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 opacity-10 text-vampire-gold text-9xl"><i class="fa-solid fa-dragon"></i></div>
+                <div class="inline-block px-4 py-1.5 bg-vampire-crimson/50 text-vampire-gold rounded-full text-sm font-bold uppercase tracking-widest mb-4 border border-vampire-gold/30">
+                    Interactive Grammar Lesson
+                </div>
+                <h1 class="font-cinzel text-3xl md:text-5xl font-black text-vampire-gold mb-4 glow-text-gold tracking-wide">ADAPTING TO THE SUPERNATURAL</h1>
+                <p class="text-xl text-slate-300 mb-8 italic">"Used to", "Be used to" &amp; "Get used to" in Bella Swan's immortal journey</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-left my-6">
+                    <div class="bg-vampire-800/80 p-4 rounded-xl border border-vampire-gold/20">
+                        <i class="fa-solid fa-history text-vampire-gold text-2xl mb-2"></i>
+                        <h3 class="font-cinzel font-bold text-slate-200 mb-1">1. Past Habits</h3>
+                        <p class="text-xs text-slate-400">Master <b>used to + infinitive</b> for old human routines.</p>
+                    </div>
+                    <div class="bg-vampire-800/80 p-4 rounded-xl border border-vampire-gold/20">
+                        <i class="fa-solid fa-shield-halved text-vampire-teal text-2xl mb-2"></i>
+                        <h3 class="font-cinzel font-bold text-slate-200 mb-1">2. Familiarity</h3>
+                        <p class="text-xs text-slate-400">Express comfort with <b>be used to + -ing / noun</b>.</p>
+                    </div>
+                    <div class="bg-vampire-800/80 p-4 rounded-xl border border-vampire-gold/20">
+                        <i class="fa-solid fa-bolt text-red-400 text-2xl mb-2"></i>
+                        <h3 class="font-cinzel font-bold text-slate-200 mb-1">3. Adaptation</h3>
+                        <p class="text-xs text-slate-400">Describe change with <b>get used to + -ing / noun</b>.</p>
+                    </div>
+                </div>
+
+                <button onclick="goToSlide(2)" class="touch-btn mt-4 px-8 py-4 bg-gradient-to-r from-vampire-crimson to-red-800 text-white font-bold text-lg rounded-2xl border border-vampire-gold/40 hover:brightness-125 shadow-xl flex items-center space-x-3 mx-auto">
+                    <span>Begin Lesson</span><i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+        </section>
+
+        <!-- 2: Warm-up matching -->
+        <section id="slide-2" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-6">
+                    <div>
+                        <span class="text-xs font-bold text-vampire-gold uppercase tracking-wider">Warm-up Activity</span>
+                        <h2 class="font-cinzel text-2xl md:text-3xl font-bold text-slate-100">Bella's Life Transformation</h2>
+                    </div>
+                    <div class="text-sm bg-vampire-800 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300">
+                        Tap a Bella stage, then tap its matching meaning
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-3">
+                        <button onclick="selectMatch('A', this)" class="match-item w-full p-4 bg-vampire-800/90 hover:bg-vampire-700 border-2 border-slate-700 rounded-2xl text-left text-lg font-semibold transition"><span>1. Human Bella in Phoenix</span></button>
+                        <button onclick="selectMatch('B', this)" class="match-item w-full p-4 bg-vampire-800/90 hover:bg-vampire-700 border-2 border-slate-700 rounded-2xl text-left text-lg font-semibold transition"><span>2. Moving to rainy Forks</span></button>
+                        <button onclick="selectMatch('C', this)" class="match-item w-full p-4 bg-vampire-800/90 hover:bg-vampire-700 border-2 border-slate-700 rounded-2xl text-left text-lg font-semibold transition"><span>3. Newborn vampire Bella</span></button>
+                    </div>
+                    <div class="space-y-3">
+                        <button onclick="selectTarget('C', this)" class="target-item w-full p-4 bg-slate-900/80 hover:bg-slate-800 border-2 border-slate-700 rounded-2xl text-left text-base text-slate-300 transition">
+                            She is getting used to extreme speed and thirst.
+                        </button>
+                        <button onclick="selectTarget('A', this)" class="target-item w-full p-4 bg-slate-900/80 hover:bg-slate-800 border-2 border-slate-700 rounded-2xl text-left text-base text-slate-300 transition">
+                            She used to live in a hot, sunny desert climate.
+                        </button>
+                        <button onclick="selectTarget('B', this)" class="target-item w-full p-4 bg-slate-900/80 hover:bg-slate-800 border-2 border-slate-700 rounded-2xl text-left text-base text-slate-300 transition">
+                            She wasn't used to constant rain and dark clouds.
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <div id="matchFeedback" class="font-bold text-lg text-vampire-gold h-8"></div>
+                    <button onclick="resetMatching()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-bold">Reset</button>
+                </div>
+                <p class="answer-key text-xs text-amber-300 mt-2">Key: 1 → used to live · 2 → wasn't used to · 3 → getting used to</p>
+            </div>
+        </section>
+
+        <!-- 3: Grammar USED TO -->
+        <section id="slide-3" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-10 h-10 rounded-full bg-vampire-gold/20 flex items-center justify-center text-vampire-gold font-bold">1</div>
+                    <h2 class="font-cinzel text-2xl md:text-3xl font-bold text-vampire-gold">USED TO + infinitive</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 space-y-4">
+                        <div class="flex items-center space-x-2 text-vampire-teal font-bold uppercase text-xs tracking-wider">
+                            <i class="fa-solid fa-compass"></i><span>Function &amp; Meaning</span>
+                        </div>
+                        <p class="text-slate-200 text-lg leading-relaxed">
+                            <strong class="text-vampire-gold">Past habits, repeated actions or past states</strong> that are <em>no longer true today</em>.
+                        </p>
+                        <div class="p-3 bg-slate-900/80 rounded-xl border-l-4 border-vampire-gold text-sm text-slate-300">
+                            <strong>Note:</strong> there is no present form ("I use to…"). For present habits use the Present Simple.
+                        </div>
+                    </div>
+
+                    <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 space-y-3">
+                        <div class="flex items-center space-x-2 text-vampire-gold font-bold uppercase text-xs tracking-wider">
+                            <i class="fa-solid fa-cube"></i><span>Structure</span>
+                        </div>
+                        <div class="bg-slate-900 p-3 rounded-xl font-mono text-sm space-y-2">
+                            <p class="text-emerald-400"><span class="text-slate-500">[+]</span> Subject + <b>used to</b> + base verb</p>
+                            <p class="text-red-400"><span class="text-slate-500">[-]</span> Subject + <b>didn't use to</b> + base verb</p>
+                            <p class="text-amber-300"><span class="text-slate-500">[?]</span> <b>Did</b> + subject + <b>use to</b> + base verb?</p>
+                        </div>
+                        <p class="text-xs text-slate-400">⚠ After <b>did / didn't</b> the verb goes back to <b>use to</b> (no -d).</p>
+                    </div>
+                </div>
+
+                <div class="bg-vampire-crimson/20 p-5 rounded-2xl border border-vampire-crimson/50">
+                    <h4 class="font-cinzel font-bold text-vampire-gold mb-2 text-sm uppercase tracking-widest"><i class="fa-solid fa-book-open mr-2"></i>Examples</h4>
+                    <ul class="space-y-2 text-slate-200">
+                        <li class="flex items-center space-x-2"><i class="fa-solid fa-check text-emerald-400 text-sm"></i><span>Bella <b>used to live</b> in sunny Arizona with her mother.</span></li>
+                        <li class="flex items-center space-x-2"><i class="fa-solid fa-check text-emerald-400 text-sm"></i><span>Edward <b>didn't use to trust</b> humans until he met Bella.</span></li>
+                        <li class="flex items-center space-x-2"><i class="fa-solid fa-check text-emerald-400 text-sm"></i><span><b>Did</b> Bella <b>use to like</b> the rain? — No, she hated it.</span></li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4: Practice 1 -->
+        <section id="slide-4" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <h2 class="font-cinzel text-2xl font-bold text-vampire-gold mb-2">Practice 1: Past Habits (used to)</h2>
+                <p class="text-slate-400 text-sm mb-5">Type the answer and press Enter or tap Check.</p>
+
+                <div class="space-y-4">
+                    <div class="bg-vampire-800/80 p-5 rounded-2xl border border-slate-700">
+                        <label class="block text-slate-300 font-semibold mb-2">1. Before he met Bella, Edward _________ (spend) his nights alone.</label>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <input type="text" id="p1-q1" class="bg-slate-900 border-2 border-vampire-gold/40 rounded-xl px-4 py-2.5 text-vampire-gold font-bold text-lg w-64 focus:outline-none focus:border-vampire-gold" placeholder="Type answer...">
+                            <button onclick="checkInput('p1-q1')" class="touch-btn px-5 py-2.5 bg-vampire-gold text-vampire-900 font-bold rounded-xl hover:bg-yellow-400">Check</button>
+                            <span id="p1-q1-msg" class="fb font-bold"></span>
+                        </div>
+                        <p class="answer-key text-xs text-amber-300 mt-2">Key: used to spend</p>
+                    </div>
+
+                    <div class="bg-vampire-800/80 p-5 rounded-2xl border border-slate-700">
+                        <label class="block text-slate-300 font-semibold mb-2">2. Rewrite with a negative "use to": <i>Edward never slept at night.</i></label>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <input type="text" id="p1-q2" class="bg-slate-900 border-2 border-vampire-gold/40 rounded-xl px-4 py-2.5 text-vampire-gold font-bold text-lg flex-1 min-w-[16rem] focus:outline-none focus:border-vampire-gold" placeholder="Type the full sentence...">
+                            <button onclick="checkInput('p1-q2')" class="touch-btn px-5 py-2.5 bg-vampire-gold text-vampire-900 font-bold rounded-xl hover:bg-yellow-400">Check</button>
+                            <span id="p1-q2-msg" class="fb font-bold"></span>
+                        </div>
+                        <p class="answer-key text-xs text-amber-300 mt-2">Key: Edward didn't use to sleep at night.</p>
+                    </div>
+
+                    <div class="bg-vampire-800/80 p-5 rounded-2xl border border-slate-700">
+                        <label class="block text-slate-300 font-semibold mb-2">3. Make a question: <i>Bella / live / in Phoenix?</i></label>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <input type="text" id="p1-q3" class="bg-slate-900 border-2 border-vampire-gold/40 rounded-xl px-4 py-2.5 text-vampire-gold font-bold text-lg flex-1 min-w-[16rem] focus:outline-none focus:border-vampire-gold" placeholder="Type the full question...">
+                            <button onclick="checkInput('p1-q3')" class="touch-btn px-5 py-2.5 bg-vampire-gold text-vampire-900 font-bold rounded-xl hover:bg-yellow-400">Check</button>
+                            <span id="p1-q3-msg" class="fb font-bold"></span>
+                        </div>
+                        <p class="answer-key text-xs text-amber-300 mt-2">Key: Did Bella use to live in Phoenix?</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 5: Grammar BE USED TO -->
+        <section id="slide-5" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-10 h-10 rounded-full bg-vampire-teal/20 flex items-center justify-center text-vampire-teal font-bold">2</div>
+                    <h2 class="font-cinzel text-2xl md:text-3xl font-bold text-vampire-teal">BE USED TO + noun / verb-ing</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 space-y-4">
+                        <div class="flex items-center space-x-2 text-vampire-teal font-bold uppercase text-xs tracking-wider">
+                            <i class="fa-solid fa-leaf"></i><span>Meaning: familiarity / comfort</span>
+                        </div>
+                        <p class="text-slate-200 text-lg leading-relaxed">
+                            To be <strong class="text-vampire-teal">accustomed to</strong> something: it is no longer strange, difficult or surprising.
+                        </p>
+                    </div>
+
+                    <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 space-y-3">
+                        <div class="flex items-center space-x-2 text-vampire-gold font-bold uppercase text-xs tracking-wider">
+                            <i class="fa-solid fa-code"></i><span>Structure</span>
+                        </div>
+                        <div class="bg-slate-900 p-4 rounded-xl font-mono text-sm space-y-2">
+                            <p class="text-teal-300">Subject + <b>BE</b> (am / is / are / was / were) + <b>used to</b> + <b>verb-ING / noun</b></p>
+                            <p class="text-xs text-slate-400 italic">He is used to cold blood. / She isn't used to running so fast.</p>
+                            <p class="text-xs text-slate-400 italic">Are you used to the dark?</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-vampire-800 p-5 rounded-2xl border-l-4 border-vampire-teal text-slate-200">
+                    <p class="font-bold text-vampire-teal mb-1">Crucial difference:</p>
+                    <p class="text-sm">In <em>used to + infinitive</em> "to" is part of the infinitive. Here "to" is a <b>preposition</b>, so the verb must end in <b>-ING</b>.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 6: Practice 2 -->
+        <section id="slide-6" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <h2 class="font-cinzel text-2xl font-bold text-vampire-teal mb-2">Practice 2: Which form?</h2>
+                <p class="text-slate-400 text-sm mb-4">Choose the correct option, then finish the last sentence.</p>
+
+                <div id="mcqBox" class="space-y-4"></div>
+
+                <div class="bg-vampire-800/80 p-5 rounded-2xl border border-slate-700 mt-4">
+                    <p class="text-slate-200 font-semibold mb-3">4. Charlie has lived in Forks for decades, so he _________ (be used to / live) in constant rain.</p>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input type="text" id="p2-q4" class="bg-slate-900 border-2 border-vampire-teal/40 rounded-xl px-4 py-2.5 text-vampire-teal font-bold text-lg w-72 focus:outline-none focus:border-vampire-teal" placeholder="Type answer...">
+                        <button onclick="checkInput('p2-q4')" class="touch-btn px-5 py-2.5 bg-vampire-teal text-vampire-900 font-bold rounded-xl hover:bg-teal-300">Check</button>
+                        <span id="p2-q4-msg" class="fb font-bold"></span>
+                    </div>
+                    <p class="answer-key text-xs text-amber-300 mt-2">Key: 1 B · 2 B · 3 B · 4 is used to living</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 7: Grammar GET USED TO -->
+        <section id="slide-7" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 font-bold">3</div>
+                    <h2 class="font-cinzel text-2xl md:text-3xl font-bold text-red-400">GET USED TO + noun / verb-ing</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 space-y-4">
+                        <div class="flex items-center space-x-2 text-red-400 font-bold uppercase text-xs tracking-wider">
+                            <i class="fa-solid fa-arrows-rotate"></i><span>Process of change</span>
+                        </div>
+                        <p class="text-slate-200 text-lg leading-relaxed">
+                            The <strong class="text-red-400">process of becoming accustomed</strong> to something new or difficult.
+                        </p>
+                    </div>
+
+                    <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 space-y-3">
+                        <div class="flex items-center space-x-2 text-vampire-gold font-bold uppercase text-xs tracking-wider">
+                            <i class="fa-solid fa-sliders"></i><span>"Get" changes with the tense</span>
+                        </div>
+                        <div class="bg-slate-900 p-3 rounded-xl font-mono text-xs text-amber-200 space-y-1">
+                            <p>• Present: She is getting used to the sunlight.</p>
+                            <p>• Future: You will get used to it.</p>
+                            <p>• Past: He couldn't get used to the noise.</p>
+                            <p>• Perfect: I've got used to the rain.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-vampire-crimson/30 p-4 rounded-2xl border border-red-500/40 text-center font-semibold text-slate-100">
+                    Bella had to <b>get used to moving</b> at supernatural speed after her transformation.
+                </div>
+            </div>
+        </section>
+
+        <!-- 8: Practice 3 Unscramble -->
+        <section id="slide-8" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 md:p-8 rounded-3xl border border-vampire-gold/30">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="font-cinzel text-2xl font-bold text-red-400">Practice 3: Sentence Unscramble</h2>
+                    <span id="unscrambleCounter" class="text-sm font-bold text-slate-400">1 / 3</span>
+                </div>
+                <p class="text-slate-400 text-sm mb-5">Tap the words in order. Tap a word in the sentence to send it back.</p>
+
+                <div class="bg-vampire-800/90 p-6 rounded-2xl border border-slate-700 text-center">
+                    <div id="unscrambleTarget" class="min-h-16 bg-slate-900 border-2 border-dashed border-vampire-gold/40 rounded-xl p-4 flex flex-wrap gap-2 items-center justify-center mb-6"></div>
+                    <div id="wordBank" class="flex flex-wrap gap-3 justify-center mb-6"></div>
+
+                    <div class="flex flex-wrap justify-center gap-3">
+                        <button onclick="resetUnscramble()" class="px-5 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold">Reset</button>
+                        <button onclick="checkUnscramble()" class="px-6 py-2 bg-vampire-gold text-vampire-900 rounded-xl font-bold hover:bg-yellow-400">Check</button>
+                        <button id="nextSentenceBtn" onclick="nextSentence()" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl font-bold">Next sentence <i class="fa-solid fa-arrow-right ml-1"></i></button>
+                    </div>
+                    <div id="unscrambleFeedback" class="mt-4 font-bold text-lg h-7"></div>
+                    <p id="unscrambleKey" class="answer-key text-xs text-amber-300 mt-1"></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 9: Summary -->
+        <section id="slide-9" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 rounded-3xl border border-vampire-gold/30">
+                <h2 class="font-cinzel text-2xl font-bold text-vampire-gold mb-4 text-center">Summary Table</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-vampire-gold/40 text-vampire-gold font-cinzel text-sm">
+                                <th class="p-3">Structure</th><th class="p-3">Followed by</th><th class="p-3">Meaning</th><th class="p-3">Example</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-xs md:text-sm divide-y divide-slate-800">
+                            <tr>
+                                <td class="p-3 font-bold text-amber-300">used to</td>
+                                <td class="p-3 font-mono text-emerald-400">base verb</td>
+                                <td class="p-3">Past habit / state (not true now)</td>
+                                <td class="p-3 text-slate-300">I used to drink orange juice.</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-bold text-vampire-teal">be used to</td>
+                                <td class="p-3 font-mono text-emerald-400">verb-ING / noun</td>
+                                <td class="p-3">Familiar, not strange any more</td>
+                                <td class="p-3 text-slate-300">They are used to dark nights.</td>
+                            </tr>
+                            <tr>
+                                <td class="p-3 font-bold text-red-400">get used to</td>
+                                <td class="p-3 font-mono text-emerald-400">verb-ING / noun</td>
+                                <td class="p-3">Process of becoming familiar</td>
+                                <td class="p-3 text-slate-300">She will get used to her powers.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- 10: Story gap fill -->
+        <section id="slide-10" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 rounded-3xl border border-vampire-gold/30">
+                <h2 class="font-cinzel text-2xl font-bold text-vampire-gold mb-2">Master Challenge: Bella's Story</h2>
+                <p class="text-xs text-slate-400 mb-4">Complete the story with the correct form of <b>used to</b>, <b>be used to</b> or <b>get used to</b>.</p>
+
+                <div class="bg-vampire-800/90 p-5 rounded-2xl border border-slate-700 leading-loose text-base text-slate-200 space-y-4">
+                    <p>
+                        When Bella lived in Phoenix, she
+                        <input type="text" id="story-1" class="bg-slate-900 border-2 border-vampire-gold/40 rounded px-2 py-1 text-vampire-gold font-bold w-40 inline-block" placeholder="1. (live)">
+                        in continuous sunshine. After arriving in Forks, it was hard to
+                        <input type="text" id="story-2" class="bg-slate-900 border-2 border-vampire-gold/40 rounded px-2 py-1 text-vampire-gold font-bold w-40 inline-block" placeholder="2. (get)">
+                        the constant damp weather.
+                    </p>
+                    <p>
+                        Now, as a Cullen, she
+                        <input type="text" id="story-3" class="bg-slate-900 border-2 border-vampire-gold/40 rounded px-2 py-1 text-vampire-gold font-bold w-52 inline-block" placeholder="3. (be / not eat)">
+                        human food, and she is slowly
+                        <input type="text" id="story-4" class="bg-slate-900 border-2 border-vampire-gold/40 rounded px-2 py-1 text-vampire-gold font-bold w-56 inline-block" placeholder="4. (get / control)">
+                        her intense newborn instincts.
+                    </p>
+                </div>
+
+                <div class="mt-4 flex flex-wrap justify-between items-center gap-3">
+                    <button onclick="checkStoryGap()" class="px-6 py-3 bg-vampire-gold text-vampire-900 font-bold rounded-xl hover:bg-yellow-400">Check story</button>
+                    <div id="storyFeedback" class="font-bold text-base"></div>
+                </div>
+                <p class="answer-key text-xs text-amber-300 mt-2">Key: 1 used to live · 2 get used to · 3 is used to not eating · 4 getting used to controlling</p>
+            </div>
+        </section>
+
+        <!-- 11: Error correction -->
+        <section id="slide-11" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 rounded-3xl border border-vampire-gold/30">
+                <h2 class="font-cinzel text-2xl font-bold text-red-400 mb-4">Find &amp; Fix the Mistakes</h2>
+
+                <div class="space-y-4">
+                    <div class="bg-vampire-800/80 p-4 rounded-xl border border-slate-700">
+                        <p class="text-red-300 text-base font-mono mb-2">❌ Edward is used to live in the forest.</p>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <input type="text" id="err-1" class="flex-1 min-w-[16rem] bg-slate-900 border-2 border-slate-700 rounded-lg px-3 py-2 text-base text-emerald-400 font-bold focus:outline-none" placeholder="Type the correct sentence...">
+                            <button onclick="checkInput('err-1')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-bold">Fix</button>
+                            <span id="err-1-msg" class="fb text-sm font-bold"></span>
+                        </div>
+                        <p class="answer-key text-xs text-amber-300 mt-2">Key: Edward is used to living in the forest. (or: Edward used to live in the forest.)</p>
+                    </div>
+
+                    <div class="bg-vampire-800/80 p-4 rounded-xl border border-slate-700">
+                        <p class="text-red-300 text-base font-mono mb-2">❌ Bella didn't used to know about vampires.</p>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <input type="text" id="err-2" class="flex-1 min-w-[16rem] bg-slate-900 border-2 border-slate-700 rounded-lg px-3 py-2 text-base text-emerald-400 font-bold focus:outline-none" placeholder="Type the correct sentence...">
+                            <button onclick="checkInput('err-2')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-bold">Fix</button>
+                            <span id="err-2-msg" class="fb text-sm font-bold"></span>
+                        </div>
+                        <p class="answer-key text-xs text-amber-300 mt-2">Key: Bella didn't use to know about vampires.</p>
+                    </div>
+
+                    <div class="bg-vampire-800/80 p-4 rounded-xl border border-slate-700">
+                        <p class="text-red-300 text-base font-mono mb-2">❌ She is getting used to drink blood from animals.</p>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <input type="text" id="err-3" class="flex-1 min-w-[16rem] bg-slate-900 border-2 border-slate-700 rounded-lg px-3 py-2 text-base text-emerald-400 font-bold focus:outline-none" placeholder="Type the correct sentence...">
+                            <button onclick="checkInput('err-3')" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-bold">Fix</button>
+                            <span id="err-3-msg" class="fb text-sm font-bold"></span>
+                        </div>
+                        <p class="answer-key text-xs text-amber-300 mt-2">Key: She is getting used to drinking blood from animals.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 12: Speaking -->
+        <section id="slide-12" class="slide-content hidden my-auto w-full max-w-5xl mx-auto">
+            <div class="glass-panel p-6 rounded-3xl border border-vampire-gold/30">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="font-cinzel text-2xl font-bold text-vampire-gold">Speaking Prompts</h2>
+                    <span class="text-xs bg-vampire-gold/20 text-vampire-gold px-3 py-1 rounded-full border border-vampire-gold/40">Pair work</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-vampire-800/90 p-5 rounded-2xl border border-slate-700">
+                        <div class="text-xs font-bold text-amber-400 mb-2">PROMPT 1</div>
+                        <p class="text-slate-200 text-base font-semibold">What is one thing you <b>used to do</b> when you were younger that you don't do now?</p>
+                    </div>
+                    <div class="bg-vampire-800/90 p-5 rounded-2xl border border-slate-700">
+                        <div class="text-xs font-bold text-vampire-teal mb-2">PROMPT 2</div>
+                        <p class="text-slate-200 text-base font-semibold">If you moved to a cold, dark town like Forks, what would be hardest to <b>get used to</b>?</p>
+                    </div>
+                    <div class="bg-vampire-800/90 p-5 rounded-2xl border border-slate-700">
+                        <div class="text-xs font-bold text-red-400 mb-2">PROMPT 3</div>
+                        <p class="text-slate-200 text-base font-semibold">What routine in your daily life are you completely <b>used to</b> now?</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 text-center text-xs text-slate-400">
+                    💡 <b>Teacher tip:</b> use the Pen or the "+ Note" button on the left to write students' ideas on screen. Drawings stay on the slide.
+                </div>
+            </div>
+        </section>
+
+        <!-- 13: Homework -->
+        <section id="slide-13" class="slide-content hidden my-auto w-full max-w-4xl mx-auto text-center">
+            <div class="glass-panel p-8 rounded-3xl border-2 border-vampire-gold/40 shadow-2xl">
+                <i class="fa-solid fa-crown text-vampire-gold text-5xl mb-4"></i>
+                <h2 class="font-cinzel text-3xl font-bold text-vampire-gold mb-2">Lesson Complete!</h2>
+                <p class="text-slate-300 text-base mb-6">You know how to talk about past states and adaptation.</p>
+
+                <div class="bg-vampire-800 p-6 rounded-2xl border border-slate-700 text-left max-w-xl mx-auto space-y-3 mb-6">
+                    <h3 class="font-cinzel font-bold text-vampire-gold text-sm uppercase tracking-widest border-b border-slate-700 pb-2">Homework</h3>
+                    <p class="text-sm text-slate-200">1. Write 5 sentences about your own life using <b>used to</b>, <b>be used to</b> and <b>get used to</b>.</p>
+                    <p class="text-sm text-slate-200">2. Imagine you became a vampire or a werewolf: write 3 sentences about what you would need to <b>get used to</b>.</p>
+                </div>
+
+                <button onclick="restartLesson()" class="px-8 py-3 bg-vampire-gold text-vampire-900 font-bold rounded-2xl hover:bg-yellow-400 transition">Restart (clears answers &amp; drawings)</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="relative z-30 glass-panel border-t border-vampire-gold/30">
+        <div class="h-1 bg-slate-800"><div id="progressBar" class="h-1 bg-vampire-gold transition-all duration-300" style="width:0%"></div></div>
+        <div class="px-4 md:px-6 py-3 flex justify-between items-center">
+            <button id="prevBtn" onclick="prevSlide()" class="touch-btn px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-vampire-gold border border-slate-700 rounded-xl font-bold text-sm flex items-center space-x-2">
+                <i class="fa-solid fa-chevron-left"></i><span>Previous</span>
+            </button>
+            <div class="flex items-center space-x-2">
+                <span class="text-xs text-slate-400 font-bold mr-2">SLIDE</span>
+                <span id="slideIndicator" class="font-cinzel font-bold text-vampire-gold text-base">1 / 13</span>
+            </div>
+            <button id="nextBtn" onclick="nextSlide()" class="touch-btn px-6 py-2.5 bg-vampire-gold hover:bg-yellow-400 text-vampire-900 rounded-xl font-bold text-sm flex items-center space-x-2 shadow-lg">
+                <span>Next</span><i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
+    </footer>
+
+    <script>
+    /* ========= Helpers ========= */
+    const $ = id => document.getElementById(id);
+    const TOTAL = 13;
+    let cur = 1;
+    let soundOn = true;
+    const TOPICS = [
+        "Title & Objectives", "Warm-up Matching", "Grammar: used to", "Practice 1: used to",
+        "Grammar: be used to", "Practice 2: be used to", "Grammar: get used to", "Practice 3: Unscramble",
+        "Summary Table", "Master Challenge", "Error Correction", "Speaking", "Wrap-up"
+    ];
+
+    function norm(s) {
+        return s.toLowerCase().replace(/[’‘`´]/g, "'").replace(/\s+/g, ' ').replace(/[.!?]+$/, '').trim();
+    }
+
+    /* ========= Sound ========= */
+    let audioCtx = null;
+    function beep(freq, start, dur, type, vol) {
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime + start);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime + start);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + start + dur);
+        osc.start(audioCtx.currentTime + start); osc.stop(audioCtx.currentTime + start + dur);
+    }
+    function playSound(type) {
+        if (!soundOn) return;
+        try {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (type === 'correct') { beep(523, 0, .15, 'sine', .2); beep(659, .12, .25, 'sine', .2); }
+            else if (type === 'wrong') { beep(180, 0, .25, 'sawtooth', .15); }
+            else if (type === 'click') { beep(400, 0, .05, 'triangle', .05); }
+            else if (type === 'alarm') { for (let i = 0; i < 4; i++) beep(880, i * .4, .25, 'square', .12); }
+        } catch (e) {}
+    }
+    function toggleSound() {
+        soundOn = !soundOn;
+        $('soundToggleBtn').innerHTML = soundOn
+            ? '<i class="fa-solid fa-volume-high"></i>'
+            : '<i class="fa-solid fa-volume-xmark text-red-400"></i>';
+    }
+
+    /* ========= Drawing overlay ========= */
+    const canvas = $('drawingCanvas'), ctx = canvas.getContext('2d');
+    let dpr = 1, tool = 'select', penColor = '#f5d061';
+    const SIZES = [3, 6, 12], SIZE_LABELS = ['S', 'M', 'L'];
+    let sizeIdx = 1;
+    let drawing = false, pts = [], hlBase = null, canvasReady = false;
+    let undoStack = [];
+    let slideDrawings = {};
+
+    function clearRaw() {
+        ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.restore();
+    }
+    function drawDataUrl(url) {
+        if (!url) return;
+        const img = new Image();
+        img.onload = () => {
+            ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height); ctx.restore();
+        };
+        img.src = url;
+    }
+    function resizeCanvas() {
+        const saved = canvasReady ? canvas.toDataURL() : null;
+        dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(innerWidth * dpr);
+        canvas.height = Math.round(innerHeight * dpr);
+        canvas.style.width = innerWidth + 'px';
+        canvas.style.height = innerHeight + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        canvasReady = true;
+        drawDataUrl(saved);
+        undoStack = [];
+        const fog = $('fogCanvas');
+        fog.width = innerWidth; fog.height = innerHeight;
+    }
+    function pushUndo() {
+        try {
+            undoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            if (undoStack.length > 8) undoStack.shift();
+        } catch (e) {}
+    }
+    function undoDraw() {
+        const img = undoStack.pop();
+        if (img) ctx.putImageData(img, 0, 0);
+        playSound('click');
+    }
+    function clearCanvasOverlay() {
+        pushUndo(); clearRaw(); playSound('click');
+    }
+    function lineWidth() {
+        if (tool === 'eraser') return 34;
+        if (tool === 'highlighter') return SIZES[sizeIdx] * 4;
+        return SIZES[sizeIdx];
+    }
+    function applyStyle() {
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.lineWidth = lineWidth();
+        ctx.strokeStyle = ctx.fillStyle = penColor;
+        if (tool === 'eraser') { ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 1; }
+        else if (tool === 'highlighter') { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = .35; }
+        else { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+    }
+    function resetStyle() { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+
+    canvas.addEventListener('pointerdown', e => {
+        if (tool === 'select' || tool === 'laser') return;
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+        drawing = true; pushUndo();
+        pts = [{ x: e.clientX, y: e.clientY }];
+        if (tool === 'highlighter') {
+            hlBase = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        } else {
+            applyStyle();
+            ctx.beginPath(); ctx.arc(e.clientX, e.clientY, lineWidth() / 2, 0, Math.PI * 2); ctx.fill();
+            resetStyle();
+        }
+    });
+    canvas.addEventListener('pointermove', e => {
+        if (!drawing) return;
+        const p = { x: e.clientX, y: e.clientY };
+        if (tool === 'highlighter') {
+            pts.push(p);
+            ctx.putImageData(hlBase, 0, 0);
+            applyStyle();
+            ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+            ctx.stroke(); resetStyle();
+        } else {
+            const last = pts[pts.length - 1];
+            applyStyle();
+            ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+            resetStyle(); pts.push(p);
+        }
+    });
+    function endStroke() { drawing = false; hlBase = null; resetStyle(); }
+    canvas.addEventListener('pointerup', endStroke);
+    canvas.addEventListener('pointercancel', endStroke);
+
+    window.addEventListener('pointermove', e => {
+        if (tool !== 'laser') return;
+        const l = $('laserPointer');
+        l.style.left = e.clientX + 'px'; l.style.top = e.clientY + 'px';
+    });
+
+    function setTool(t) {
+        tool = t;
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        const b = $('tool-' + t); if (b) b.classList.add('active');
+        canvas.style.pointerEvents = (t === 'pen' || t === 'highlighter' || t === 'eraser') ? 'auto' : 'none';
+        $('laserPointer').style.display = (t === 'laser') ? 'block' : 'none';
+        playSound('click');
+    }
+    function setPenColor(c) {
+        penColor = c;
+        document.querySelectorAll('.color-btn').forEach(b => b.classList.toggle('active', b.dataset.color === c));
+        if (tool === 'select' || tool === 'laser' || tool === 'eraser') setTool('pen');
+    }
+    function cycleSize() {
+        sizeIdx = (sizeIdx + 1) % SIZES.length;
+        $('sizeLabel').innerText = SIZE_LABELS[sizeIdx];
+        playSound('click');
+    }
+
+    /* ========= Sticky notes ========= */
+    function createStickyNote() {
+        const note = document.createElement('div');
+        note.className = 'sticky-note bg-amber-200 text-slate-900 p-3 rounded-xl w-52 border border-amber-300';
+        note.style.left = (innerWidth / 2 - 104 + Math.random() * 60) + 'px';
+        note.style.top = (innerHeight / 2 - 80 + Math.random() * 60) + 'px';
+        note.innerHTML = `
+            <div class="flex justify-between items-center border-b border-amber-400 pb-1 mb-2">
+                <span class="text-[10px] font-bold uppercase text-amber-800"><i class="fa-solid fa-grip mr-1"></i>Note (drag me)</span>
+                <button class="note-close text-amber-800 hover:text-red-600"><i class="fa-solid fa-xmark text-xs"></i></button>
+            </div>
+            <textarea class="w-full bg-transparent text-sm font-semibold focus:outline-none resize-none h-20 text-slate-800" placeholder="Type here..."></textarea>`;
+        note.querySelector('.note-close').addEventListener('click', () => note.remove());
+        document.body.appendChild(note);
+        makeDraggable(note);
+        playSound('click');
+    }
+    function makeDraggable(el) {
+        let sx, sy, ox, oy, dragging = false;
+        el.addEventListener('pointerdown', e => {
+            if (e.target.closest('textarea') || e.target.closest('.note-close')) return;
+            dragging = true; sx = e.clientX; sy = e.clientY; ox = el.offsetLeft; oy = el.offsetTop;
+            el.setPointerCapture(e.pointerId); el.style.cursor = 'grabbing';
+        });
+        el.addEventListener('pointermove', e => {
+            if (!dragging) return;
+            el.style.left = (ox + e.clientX - sx) + 'px';
+            el.style.top = (oy + e.clientY - sy) + 'px';
+        });
+        const stop = () => { dragging = false; el.style.cursor = 'grab'; };
+        el.addEventListener('pointerup', stop); el.addEventListener('pointercancel', stop);
+    }
+
+    /* ========= Slide navigation ========= */
+    function showSlide(n, save = true) {
+        if (save && canvasReady) slideDrawings[cur] = canvas.toDataURL();
+        cur = Math.min(TOTAL, Math.max(1, n));
+        clearRaw(); undoStack = [];
+        drawDataUrl(slideDrawings[cur]);
+        document.querySelectorAll('.slide-content').forEach(s => s.classList.add('hidden'));
+        $('slide-' + cur).classList.remove('hidden');
+        $('slideIndicator').innerText = cur + ' / ' + TOTAL;
+        $('currentTopicLabel').innerText = TOPICS[cur - 1];
+        $('progressBar').style.width = (cur / TOTAL * 100) + '%';
+        $('prevBtn').disabled = cur === 1;
+        $('nextBtn').disabled = cur === TOTAL;
+        document.querySelector('main').scrollTop = 0;
+        playSound('click');
+    }
+    function goToSlide(n) { showSlide(n); }
+    function prevSlide() { if (cur > 1) showSlide(cur - 1); }
+    function nextSlide() { if (cur < TOTAL) showSlide(cur + 1); }
+
+    function restartLesson() {
+        slideDrawings = {};
+        document.querySelectorAll('.sticky-note').forEach(n => n.remove());
+        resetAll();
+        showSlide(1, false);
+    }
+
+    document.addEventListener('keydown', e => {
+        const t = e.target;
+        if (t.matches('input[type=text]')) {
+            if (e.key === 'Enter') {
+                if (t.id.startsWith('story-')) checkStoryGap(); else if (checks[t.id]) checkInput(t.id);
+            }
+            return;
+        }
+        if (t.matches('textarea')) return;
+        if (e.key === 'ArrowRight' || e.key === 'PageDown') { nextSlide(); }
+        else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { prevSlide(); }
+        else if (e.key === 'Escape') { setTool('select'); }
+    });
+
+    /* ========= Header widgets ========= */
+    let fontSize = 16;
+    function changeFont(d) {
+        fontSize = Math.min(26, Math.max(12, fontSize + d));
+        document.documentElement.style.fontSize = fontSize + 'px';
+    }
+    function toggleAnswers() {
+        const on = document.body.classList.toggle('show-answers');
+        $('answersBtn').querySelector('i').className = on ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash';
+    }
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+        else document.exitFullscreen().catch(() => {});
+    }
+
+    /* ========= Timer ========= */
+    let timerSeconds = 300, timerInterval = null, timerRunning = false;
+    function toggleTimerWidget() { $('timerWidget').classList.toggle('hidden'); }
+    function updateTimerDisplay() {
+        const m = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
+        const s = String(timerSeconds % 60).padStart(2, '0');
+        $('timerDisplay').innerText = m + ':' + s;
+        $('bigTimerDisplay').innerText = m + ':' + s;
+    }
+    function addTimer(s) { timerSeconds += s; updateTimerDisplay(); }
+    function toggleTimerRun() {
+        const btn = $('startTimerBtn');
+        if (timerRunning) {
+            clearInterval(timerInterval); timerRunning = false; btn.innerText = 'Start';
+            return;
+        }
+        if (timerSeconds <= 0) return;
+        timerRunning = true; btn.innerText = 'Pause';
+        timerInterval = setInterval(() => {
+            timerSeconds--; updateTimerDisplay();
+            if (timerSeconds <= 0) {
+                clearInterval(timerInterval); timerRunning = false; btn.innerText = 'Start';
+                playSound('alarm');
+                ['bigTimerDisplay', 'timerDisplay'].forEach(id => {
+                    const el = $(id); el.classList.remove('timer-flash'); void el.offsetWidth; el.classList.add('timer-flash');
+                });
+                $('timerWidget').classList.remove('hidden');
+            }
+        }, 1000);
+    }
+    function resetTimer() {
+        clearInterval(timerInterval); timerRunning = false; timerSeconds = 300;
+        updateTimerDisplay(); $('startTimerBtn').innerText = 'Start';
+        $('bigTimerDisplay').classList.remove('timer-flash'); $('timerDisplay').classList.remove('timer-flash');
+    }
+
+    /* ========= Exercises: text inputs ========= */
+    const checks = {
+        'p1-q1': { test: v => /^used to spend$/.test(v) },
+        'p1-q2': { test: v => /\bdid(n't| not) use to sleep\b/.test(v) },
+        'p1-q3': { test: v => /^did bella use to live in phoenix$/.test(v) },
+        'p2-q4': { test: v => /\b(is|'s) used to living\b/.test(v) },
+        'err-1': { test: v => /\bis used to living\b/.test(v) || (/\bused to live\b/.test(v) && !/\b(is|was|be|are|am) used to live\b/.test(v)) },
+        'err-2': { test: v => /\bdid(n't| not) use to know\b/.test(v) },
+        'err-3': { test: v => /\bgetting used to drinking\b/.test(v) },
+        'story-1': { test: v => /^used to live$/.test(v) },
+        'story-2': { test: v => /^get used to$/.test(v) },
+        'story-3': { test: v => /^(is|'s) used to not eating$/.test(v) },
+        'story-4': { test: v => /^getting used to controlling$/.test(v) }
+    };
+    function markInput(id, ok) {
+        const inp = $(id);
+        inp.classList.remove('ok', 'bad'); inp.classList.add(ok ? 'ok' : 'bad');
+        const msg = $(id + '-msg');
+        if (msg) {
+            msg.textContent = ok ? '✓ Correct!' : '✗ Try again';
+            msg.className = 'fb font-bold ' + (ok ? 'text-emerald-400' : 'text-red-400');
+        }
+    }
+    function checkInput(id) {
+        const v = norm($(id).value);
+        if (!v) return;
+        const ok = checks[id].test(v);
+        markInput(id, ok); playSound(ok ? 'correct' : 'wrong');
+    }
+    function checkStoryGap() {
+        let n = 0;
+        for (let i = 1; i <= 4; i++) {
+            const id = 'story-' + i;
+            const ok = checks[id].test(norm($(id).value));
+            markInput(id, ok); if (ok) n++;
+        }
+        const fb = $('storyFeedback');
+        fb.textContent = n === 4 ? '🎉 Perfect! 4 / 4' : n + ' / 4 correct. Fix the red ones.';
+        fb.className = 'font-bold text-base ' + (n === 4 ? 'text-emerald-400' : 'text-amber-300');
+        playSound(n === 4 ? 'correct' : 'wrong');
+    }
+
+    /* ========= Exercises: matching ========= */
+    let selMatch = null, matchedCount = 0;
+    function selectMatch(key, el) {
+        if (el.classList.contains('done')) return;
+        document.querySelectorAll('.match-item').forEach(b => b.classList.remove('sel'));
+        el.classList.add('sel'); selMatch = { key, el }; playSound('click');
+    }
+    function selectTarget(key, el) {
+        const fb = $('matchFeedback');
+        if (el.classList.contains('done')) return;
+        if (!selMatch) { fb.textContent = 'Tap a Bella stage on the left first.'; fb.className = 'font-bold text-lg text-slate-300 h-8'; return; }
+        if (selMatch.key === key) {
+            selMatch.el.classList.remove('sel'); selMatch.el.classList.add('done');
+            el.classList.add('done'); matchedCount++;
+            fb.textContent = matchedCount === 3 ? '🎉 All matched!' : '✓ Correct match!';
+            fb.className = 'font-bold text-lg text-emerald-400 h-8';
+            playSound('correct');
+        } else {
+            fb.textContent = '✗ Try again!'; fb.className = 'font-bold text-lg text-red-400 h-8';
+            playSound('wrong');
+        }
+        selMatch = null;
+        document.querySelectorAll('.match-item').forEach(b => b.classList.remove('sel'));
+    }
+    function resetMatching() {
+        document.querySelectorAll('.match-item, .target-item').forEach(b => b.classList.remove('sel', 'done'));
+        selMatch = null; matchedCount = 0;
+        const fb = $('matchFeedback'); fb.textContent = ''; fb.className = 'font-bold text-lg text-vampire-gold h-8';
+    }
+
+    /* ========= Exercises: multiple choice ========= */
+    const MCQ = [
+        { q: '1. The Cullens live among humans quietly because they _________ controlling their thirst.',
+          o: ['A) used to control', 'B) are used to controlling', 'C) get used to control'], c: 1,
+          why: 'be used to + -ing: they are already familiar with it.' },
+        { q: '2. Bella _________ in Phoenix, but now she lives in Forks.',
+          o: ['A) is used to living', 'B) used to live', 'C) gets used to live'], c: 1,
+          why: 'A finished past state → used to + base verb.' },
+        { q: '3. It took Bella a few weeks to _________ the new speed of her body.',
+          o: ['A) use to', 'B) get used to', 'C) being used to'], c: 1,
+          why: 'A process of change → get used to (here + noun).' }
+    ];
+    function renderMCQ() {
+        const box = $('mcqBox'); box.innerHTML = '';
+        MCQ.forEach((item, qi) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'bg-vampire-800/80 p-5 rounded-2xl border border-slate-700';
+            wrap.innerHTML = `<p class="text-slate-200 font-semibold mb-3">${item.q}</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+                <p class="mcq-why text-sm font-bold mt-3 h-5"></p>`;
+            const grid = wrap.querySelector('div');
+            item.o.forEach((txt, oi) => {
+                const b = document.createElement('button');
+                b.className = 'mcq-opt p-3 bg-slate-900 border-2 border-slate-700 rounded-xl hover:border-vampire-teal font-semibold text-left touch-btn';
+                b.textContent = txt;
+                b.onclick = () => {
+                    if (wrap.dataset.done) return;
+                    const why = wrap.querySelector('.mcq-why');
+                    if (oi === item.c) {
+                        b.classList.remove('wrong'); b.classList.add('right'); wrap.dataset.done = '1';
+                        why.textContent = '✓ ' + item.why; why.className = 'mcq-why text-sm font-bold mt-3 text-emerald-400';
+                        playSound('correct');
+                    } else {
+                        b.classList.add('wrong');
+                        why.textContent = '✗ Not quite, try another one.'; why.className = 'mcq-why text-sm font-bold mt-3 text-red-400';
+                        playSound('wrong');
+                    }
+                };
+                grid.appendChild(b);
+            });
+            box.appendChild(wrap);
+        });
+    }
+
+    /* ========= Exercises: unscramble ========= */
+    const SENTENCES = [
+        'Bella will soon get used to her vampire thirst',
+        'The Cullens are used to hiding from sunlight',
+        "Edward didn't use to trust humans"
+    ];
+    let usIdx = 0, usTokens = [], usBank = [], usPlaced = [];
+    function shuffle(a) {
+        const arr = a.slice();
+        for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+        return arr;
+    }
+    function initUnscramble() {
+        const s = SENTENCES[usIdx];
+        usTokens = s.split(' ');
+        const idx = usTokens.map((_, i) => i);
+        let sh = shuffle(idx), tries = 0;
+        while (sh.join() === idx.join() && tries++ < 10) sh = shuffle(idx);
+        usBank = sh; usPlaced = [];
+        $('unscrambleCounter').innerText = (usIdx + 1) + ' / ' + SENTENCES.length;
+        $('unscrambleKey').textContent = 'Key: ' + s + '.';
+        $('unscrambleFeedback').textContent = '';
+        $('nextSentenceBtn').disabled = usIdx >= SENTENCES.length - 1;
+        renderUnscramble();
+    }
+    function renderUnscramble() {
+        const bank = $('wordBank'), target = $('unscrambleTarget');
+        bank.innerHTML = ''; target.innerHTML = '';
+        usBank.filter(i => !usPlaced.includes(i)).forEach(i => {
+            const b = document.createElement('button');
+            b.className = 'px-4 py-2 bg-slate-800 hover:bg-slate-700 text-vampire-gold border border-vampire-gold/30 rounded-xl font-bold text-base touch-btn';
+            b.textContent = usTokens[i];
+            b.onclick = () => { usPlaced.push(i); renderUnscramble(); playSound('click'); };
+            bank.appendChild(b);
+        });
+        if (!usPlaced.length) {
+            target.innerHTML = '<span class="text-slate-500 text-sm italic">Tap words below to build the sentence...</span>';
+        }
+        usPlaced.forEach(i => {
+            const t = document.createElement('button');
+            t.className = 'px-3 py-1.5 bg-vampire-gold text-vampire-900 rounded-lg font-bold text-base touch-btn';
+            t.textContent = usTokens[i];
+            t.onclick = () => { usPlaced = usPlaced.filter(x => x !== i); renderUnscramble(); playSound('click'); };
+            target.appendChild(t);
+        });
+    }
+    function resetUnscramble() { usPlaced = []; $('unscrambleFeedback').textContent = ''; renderUnscramble(); }
+    function nextSentence() { if (usIdx < SENTENCES.length - 1) { usIdx++; initUnscramble(); } }
+    function checkUnscramble() {
+        const fb = $('unscrambleFeedback');
+        const ok = usPlaced.length === usTokens.length && usPlaced.map(i => usTokens[i]).join(' ') === SENTENCES[usIdx];
+        fb.textContent = ok ? '✓ Perfect sentence!' : '✗ Incorrect order, try again';
+        fb.className = 'mt-4 font-bold text-lg h-7 ' + (ok ? 'text-emerald-400' : 'text-red-400');
+        playSound(ok ? 'correct' : 'wrong');
+    }
+
+    /* ========= Reset everything ========= */
+    function resetAll() {
+        document.querySelectorAll('input[type=text]').forEach(i => { i.value = ''; i.classList.remove('ok', 'bad'); });
+        document.querySelectorAll('.fb').forEach(m => { m.textContent = ''; });
+        $('storyFeedback').textContent = '';
+        resetMatching(); renderMCQ(); usIdx = 0; initUnscramble();
+    }
+
+    /* ========= Fog background ========= */
+    function initFogEffect() {
+        const fc = $('fogCanvas'), fctx = fc.getContext('2d');
+        const particles = [];
+        for (let i = 0; i < 20; i++) {
+            particles.push({ x: Math.random() * fc.width, y: Math.random() * fc.height,
+                r: Math.random() * 120 + 80, dx: (Math.random() - .5) * .4, dy: (Math.random() - .5) * .4 });
+        }
+        (function animate() {
+            fctx.clearRect(0, 0, fc.width, fc.height);
+            particles.forEach(p => {
+                p.x += p.dx; p.y += p.dy;
+                if (p.x < -100) p.x = fc.width + 100; if (p.x > fc.width + 100) p.x = -100;
+                if (p.y < -100) p.y = fc.height + 100; if (p.y > fc.height + 100) p.y = -100;
+                const g = fctx.createRadialGradient(p.x, p.y, 10, p.x, p.y, p.r);
+                g.addColorStop(0, 'rgba(20,184,166,.15)'); g.addColorStop(1, 'rgba(9,10,15,0)');
+                fctx.fillStyle = g; fctx.beginPath(); fctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); fctx.fill();
+            });
+            requestAnimationFrame(animate);
+        })();
+    }
+
+    /* ========= Init ========= */
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('load', () => {
+        resizeCanvas();
+        initFogEffect();
+        document.querySelectorAll('input[type=text]').forEach(i => {
+            i.setAttribute('autocomplete', 'off'); i.setAttribute('autocapitalize', 'none');
+            i.setAttribute('autocorrect', 'off'); i.setAttribute('spellcheck', 'false');
+        });
+        renderMCQ(); initUnscramble(); updateTimerDisplay();
+        showSlide(1, false);
+    });
+    </script>
+</body>
+</html>
